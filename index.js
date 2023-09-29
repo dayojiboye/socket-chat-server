@@ -1,23 +1,57 @@
 const express = require("express");
 const app = express();
-const PORT = 4000;
-
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
-
 const http = require("http").Server(app);
 const cors = require("cors");
-
-app.use(cors());
-
+const PORT = 4000;
 const socketIO = require("socket.io")(http, {
 	cors: {
-		origin: "<http://localhost:3000>",
+		origin: "http://172.20.10.3:3000",
 	},
 });
 
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+app.use(cors());
+
+const generateID = () => Math.random().toString(36).substring(2, 10);
+let chatGroups = [];
+
 socketIO.on("connection", (socket) => {
 	console.log(`⚡: ${socket.id} user just connected!`);
+
+	socket.on("createGroup", (name) => {
+		socket.join(name);
+		chatGroups.unshift({ id: generateID(), name, messages: [] });
+		socketIO.emit("groupsList", chatGroups);
+	});
+
+	socket.on("findGroup", (id) => {
+		let result = chatGroups.filter((group) => group.id == id);
+		socket.emit("foundGroup", result?.[0]?.messages);
+	});
+
+	socket.on("newMessage", (data) => {
+		const { group_id, message, user, timestamp } = data;
+
+		let result = chatGroups.filter((group) => group.id == group_id);
+
+		const newMessage = {
+			id: generateID(),
+			text: message,
+			user,
+			time: timestamp,
+		};
+
+		socket.to(result[0].name).emit("groupMessage", newMessage);
+		result[0].messages.push(newMessage);
+
+		socketIO.emit("groupsList", chatGroups);
+		socketIO.emit("foundGroup", result[0].messages);
+	});
+
+	socket.on("typing", (data) => {
+		socket.broadcast.emit("typing", data);
+	});
 
 	socket.on("disconnect", () => {
 		socket.disconnect();
@@ -25,12 +59,10 @@ socketIO.on("connection", (socket) => {
 	});
 });
 
-app.get("/api", (req, res) => {
-	res.json({
-		message: "Hello world",
-	});
+app.get("/groups", (req, res) => {
+	res.json(chatGroups);
 });
 
-app.listen(PORT, () => {
+http.listen(PORT, () => {
 	console.log(`Server listening on ${PORT}`);
 });
