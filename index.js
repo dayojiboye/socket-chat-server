@@ -5,7 +5,7 @@ const cors = require("cors");
 const PORT = 4000;
 const socketIO = require("socket.io")(http, {
 	cors: {
-		origin: "http://172.20.10.3:3000",
+		origin: "http://localhost:3000",
 	},
 });
 
